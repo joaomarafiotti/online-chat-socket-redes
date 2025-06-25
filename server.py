@@ -1,111 +1,107 @@
 import threading
 import socket
 
-# Now this Host is the IP address of the Server, over which it is running.
-# I've user my localhost.
-host = "192.168.2.104"
-port = 5555  # Choose any random port which is not so common (like 80)
+# Definição do IP e porta do servidor (localhost = 127.0.0.1)
+host = "127.0.0.1"
+port = 5555  # Porta escolhida para conexões
 
+# Cria o socket TCP do servidor
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# Bind the server to IP Address
-server.bind((host, port))
-# Start Listening Mode
-server.listen()
-# List to contain the Clients getting connected and nicknames
+server.bind((host, port))  # Associa o IP e porta ao servidor
+server.listen()  # Coloca o servidor em modo de escuta
+
+# Listas para armazenar os clientes conectados e seus apelidos
 clients = []
 nicknames = []
 
-
-# 1.Broadcasting Method
+# Função para enviar uma mensagem para todos os clientes conectados
 def broadcast(message):
     for client in clients:
         client.send(message)
 
-
-# 2.Receiving Messages from client then broadcasting
+# Função para lidar com mensagens recebidas de um cliente específico
 def handle(client):
     while True:
         try:
-            msg = message = client.recv(1024)
-            if msg.decode('ascii').startswith('KICK'):
+            msg = client.recv(1024)
+
+            if msg.decode('utf-8').startswith('KICK'):
                 if nicknames[clients.index(client)] == 'admin':
-                    name_to_kick = msg.decode('ascii')[5:]
-                    kick_user(name_to_kick)
+                    nome_para_remover = msg.decode('utf-8')[5:]
+                    kick_user(nome_para_remover)
                 else:
-                    client.send('Command Refused!'.encode('ascii'))
-            elif msg.decode('ascii').startswith('BAN'):
+                    client.send('Comando negado!'.encode('utf-8'))
+
+            elif msg.decode('utf-8').startswith('BAN'):
                 if nicknames[clients.index(client)] == 'admin':
-                    name_to_ban = msg.decode('ascii')[4:]
-                    kick_user(name_to_ban)
+                    nome_para_banir = msg.decode('utf-8')[4:]
+                    kick_user(nome_para_banir)
                     with open('bans.txt', 'a') as f:
-                        f.write(f'{name_to_ban}\n')
-                    print(f'{name_to_ban} was banned by the Admin!')
+                        f.write(f'{nome_para_banir}\n')
+                    print(f'{nome_para_banir} foi banido pelo administrador.')
                 else:
-                    client.send('Command Refused!'.encode('ascii'))
+                    client.send('Comando negado!'.encode('utf-8'))
+
             else:
-                broadcast(message)  # As soon as message received, broadcast it.
+                broadcast(msg)  # Envia a mensagem recebida para todos
 
         except socket.error:
             if client in clients:
                 index = clients.index(client)
-                # Index is used to remove client from list after getting disconnected
-                client.remove(client)
+                clients.remove(client)
                 client.close()
-                nickname = nicknames[index]
-                broadcast(f'{nickname} left the Chat!'.encode('ascii'))
-                nicknames.remove(nickname)
+                apelido = nicknames[index]
+                broadcast(f'{apelido} saiu do chat.'.encode('utf-8'))
+                nicknames.remove(apelido)
                 break
 
-
-# Main Receive method
+# Função principal que aceita novas conexões
 def receive():
     while True:
         client, address = server.accept()
-        print(f"Connected with {str(address)}")
-        # Ask the clients for Nicknames
-        client.send('NICK'.encode('ascii'))
-        nickname = client.recv(1024).decode('ascii')
-        # If the Client is an Admin prompt for the password.
+        print(f"Conectado com {str(address)}")
+
+        client.send('NICK'.encode('utf-8'))  # Solicita o apelido do cliente
+        nickname = client.recv(1024).decode('utf-8')
+
         with open('bans.txt', 'r') as f:
             bans = f.readlines()
 
         if nickname + '\n' in bans:
-            client.send('BAN'.encode('ascii'))
+            client.send('BAN'.encode('utf-8'))
             client.close()
             continue
 
         if nickname == 'admin':
-            client.send('PASS'.encode('ascii'))
-            password = client.recv(1024).decode('ascii')
-            # I know it is lame, but my focus is mainly for Chat system and not a Login System
+            client.send('PASS'.encode('utf-8'))
+            password = client.recv(1024).decode('utf-8')
             if password != 'adminpass':
-                client.send('REFUSE'.encode('ascii'))
+                client.send('ACESSO_NEGADO'.encode('utf-8'))
                 client.close()
                 continue
 
         nicknames.append(nickname)
         clients.append(client)
 
-        print(f'Nickname of the client is {nickname}')
-        broadcast(f'{nickname} joined the Chat'.encode('ascii'))
-        client.send('Connected to the Server!'.encode('ascii'))
+        print(f'O apelido do cliente é {nickname}')
+        broadcast(f'{nickname} entrou no chat!'.encode('utf-8'))
+        client.send('Conectado ao servidor!'.encode('utf-8'))
 
-        # Handling Multiple Clients Simultaneously
+        # Cria uma thread para lidar com esse cliente
         thread = threading.Thread(target=handle, args=(client,))
         thread.start()
 
-
+# Função para expulsar um cliente do chat
 def kick_user(name):
     if name in nicknames:
-        name_index = nicknames.index(name)
-        client_to_kick = clients[name_index]
+        index = nicknames.index(name)
+        client_to_kick = clients[index]
         clients.remove(client_to_kick)
-        client_to_kick.send('You Were Kicked from Chat !'.encode('ascii'))
+        client_to_kick.send('Você foi expulso do chat!'.encode('utf-8'))
         client_to_kick.close()
         nicknames.remove(name)
-        broadcast(f'{name} was kicked from the server!'.encode('ascii'))
+        broadcast(f'{name} foi expulso do chat.'.encode('utf-8'))
 
-
-# Calling the main method
-print('Server is Listening ...')
+# Inicia o servidor
+print('Servidor iniciado. Aguardando conexões...')
 receive()

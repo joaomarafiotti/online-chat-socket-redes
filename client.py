@@ -3,109 +3,99 @@ import threading
 import json
 import os
 
-
-def enter_server():
+# Função para entrar em um servidor existente salvo em servers.json
+def entrar_no_servidor():
     os.system('cls||clear')
-    # Enter servers.json to print the names of the servers
     with open('servers.json') as f:
         data = json.load(f)
-    print('Your servers: ', end="")
-    # Print the servers that are stored in the servers.json file
-    for servers in data:
-        print(servers, end=" ")
-    # Ask user for the name of the server to join
-    server_name = input("\nEnter the server name:")
+    print('Servidores disponíveis: ', end="")
+    for servidor in data:
+        print(servidor, end=" ")
+    
+    nome_servidor = input("\nDigite o nome do servidor para entrar: ")
     global nickname
     global password
-    nickname = input("Choose Your Nickname:")
+    nickname = input("Escolha seu apelido: ")
     if nickname == 'admin':
-        password = input("Enter Password for Admin:")
+        password = input("Digite a senha do administrador: ")
 
-    # Store the ip and port number for connection
-    ip = data[server_name]["ip"]
-    port = data[server_name]["port"]
+    ip = data[nome_servidor]["ip"]
+    port = data[nome_servidor]["port"]
     global client
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Connect to a host
     client.connect((ip, port))
 
-
-def add_server():
+# Função para adicionar um novo servidor no arquivo servers.json
+def adicionar_servidor():
     os.system('cls||clear')
-    server_name = input("Enter a name for the server:")
-    server_ip = input("Enter the ip address of the server:")
-    server_port = int(input("Enter the port number of the server:"))
+    nome = input("Digite um nome para o servidor: ")
+    ip = input("Digite o endereço IP do servidor: ")
+    porta = int(input("Digite a porta do servidor: "))
 
     with open('servers.json', 'r') as f:
         data = json.load(f)
-    # Store the info of the new server in servers.json
     with open('servers.json', 'w') as f:
-        data[server_name] = {"ip": server_ip, "port": server_port}
+        data[nome] = {"ip": ip, "port": porta}
         json.dump(data, f, indent=4)
 
-
-# Menu loop, it will loop until the user choose to enter a server
+# Menu principal: permite escolher entre entrar ou adicionar servidor
 while True:
     os.system('cls||clear')
-    option = input("(1)Enter server\n(2)Add server\n")
-    if option == '1':
-        enter_server()
+    opcao = input("(1) Entrar em servidor\n(2) Adicionar servidor\n")
+    if opcao == '1':
+        entrar_no_servidor()
         break
-    elif option == '2':
-        add_server()
+    elif opcao == '2':
+        adicionar_servidor()
 
 stop_thread = False
 
-
-def receive():
+# Função que escuta mensagens vindas do servidor
+def receber():
     while True:
         global stop_thread
         if stop_thread:
             break
         try:
-            message = client.recv(1024).decode('ascii')
-            if message == 'NICK':
-                client.send(nickname.encode('ascii'))
-                next_message = client.recv(1024).decode('ascii')
-                if next_message == 'PASS':
-                    client.send(password.encode('ascii'))
-                    if client.recv(1024).decode('ascii') == 'REFUSE':
-                        print("Connection is Refused !! Wrong Password")
+            mensagem = client.recv(1024).decode('utf-8')
+            if mensagem == 'NICK':
+                client.send(nickname.encode('utf-8'))
+                proxima_mensagem = client.recv(1024).decode('utf-8')
+                if proxima_mensagem == 'PASS':
+                    client.send(password.encode('utf-8'))
+                    if client.recv(1024).decode('utf-8') == 'ACESSO_NEGADO':
+                        print("Acesso negado! Senha incorreta.")
                         stop_thread = True
-                # Clients those are banned can't reconnect
-                elif next_message == 'BAN':
-                    print('Connection Refused due to Ban')
+                elif proxima_mensagem == 'BAN':
+                    print('Você foi banido e não pode entrar.')
                     client.close()
                     stop_thread = True
             else:
-                print(message)
+                print(mensagem)
         except socket.error:
-            print('Error Occured while Connecting')
+            print('Erro de conexão com o servidor.')
             client.close()
             break
 
-
-def write():
+# Função que envia mensagens para o servidor
+def escrever():
     while True:
         if stop_thread:
             break
-        # Getting Messages
-        message = f'{nickname}: {input("")}'
-        if message[len(nickname) + 2:].startswith('/'):
+        mensagem = f'{nickname}: {input("")}'
+        if mensagem[len(nickname) + 2:].startswith('/'):
             if nickname == 'admin':
-                if message[len(nickname) + 2:].startswith('/kick'):
-                    # 2 for : and whitespace and 6 for /KICK_
-                    client.send(f'KICK {message[len(nickname) + 2 + 6:]}'.encode('ascii'))
-                elif message[len(nickname) + 2:].startswith('/ban'):
-                    # 2 for : and whitespace and 5 for /BAN
-                    client.send(f'BAN {message[len(nickname) + 2 + 5:]}'.encode('ascii'))
+                if mensagem[len(nickname) + 2:].startswith('/kick'):
+                    client.send(f'KICK {mensagem[len(nickname) + 2 + 6:]}'.encode('utf-8'))
+                elif mensagem[len(nickname) + 2:].startswith('/ban'):
+                    client.send(f'BAN {mensagem[len(nickname) + 2 + 5:]}'.encode('utf-8'))
             else:
-                print("Commands can be executed by Admins only !!")
+                print("Apenas o administrador pode usar comandos!")
         else:
-            client.send(message.encode('ascii'))
+            client.send(mensagem.encode('utf-8'))
 
-
-receive_thread = threading.Thread(target=receive)
-receive_thread.start()
-write_thread = threading.Thread(target=write)
-write_thread.start()
+# Inicia as duas threads: uma para receber e outra para enviar mensagens
+thread_receber = threading.Thread(target=receber)
+thread_receber.start()
+thread_escrever = threading.Thread(target=escrever)
+thread_escrever.start()
